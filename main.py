@@ -9,15 +9,13 @@ intents = discord.Intents.default()
 intents.members = True 
 intents.message_content = True
 
-# --- 2. 設定（環境に合わせて修正済み） ---
+# --- 2. 設定 ---
 LOG_CHANNEL_ID = 1475491103225417738
 WELCOME_CHANNEL_ID = 1475484575114330162
-MY_GUILD_ID = 1475484397330501632
 TICKET_CATEGORY_ID = 1475853559399452752
 
 # --- 3. チケット機能用のUIクラス ---
 
-# チケットを削除する最終確認ボタン
 class ConfirmCloseView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -27,7 +25,6 @@ class ConfirmCloseView(discord.ui.View):
         await interaction.response.send_message("チャンネルを削除します...", ephemeral=True)
         await interaction.channel.delete()
 
-# チケット内にある「閉じる」ボタン
 class CloseTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -36,7 +33,6 @@ class CloseTicketView(discord.ui.View):
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("このチケットを閉じてもよろしいですか？", view=ConfirmCloseView(), ephemeral=True)
 
-# 窓口にある3種類のチケット作成ボタン
 class TicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -85,7 +81,6 @@ class MyBot(commands.Bot):
         super().__init__(command_prefix='/', intents=intents)
 
     async def setup_hook(self):
-        # ボタンの反応を永続化させるための登録
         self.add_view(TicketView())
         self.add_view(CloseTicketView())
         self.add_view(ConfirmCloseView())
@@ -98,10 +93,7 @@ bot = MyBot()
 @bot.event
 async def on_ready():
     print(f'ログイン完了: {bot.user.name}')
-    # 許可したサーバー以外からは退出（自分専用ガード）
-    for guild in bot.guilds:
-        if guild.id != MY_GUILD_ID:
-            await guild.leave()
+    # --- 修正：ここに以前あったギルド判定(退出)のコードを削除しました ---
     
     channel = bot.get_channel(LOG_CHANNEL_ID)
     if channel:
@@ -121,7 +113,6 @@ async def on_member_remove(member):
 
 # --- 6. スラッシュコマンド ---
 
-# チケット設置
 @bot.tree.command(name="ticket_setup", description="【管理者専用】チケット窓口を設置します")
 @app_commands.checks.has_permissions(administrator=True)
 async def ticket_setup(interaction: discord.Interaction):
@@ -133,7 +124,6 @@ async def ticket_setup(interaction: discord.Interaction):
     await interaction.channel.send(embed=embed, view=TicketView())
     await interaction.response.send_message("窓口を設置しました", ephemeral=True)
 
-# メッセージ削除
 @bot.tree.command(name="clear", description="【管理者専用】メッセージを一括削除します")
 @app_commands.describe(amount="削除件数", user="特定の人を指定（任意）")
 @app_commands.checks.has_permissions(administrator=True, manage_messages=True)
@@ -144,14 +134,12 @@ async def clear(interaction: discord.Interaction, amount: int, user: discord.Mem
     deleted = await interaction.channel.purge(limit=amount, check=check_condition)
     await interaction.followup.send(f"✅ {len(deleted)}件のメッセージを削除しました", ephemeral=True)
 
-# 隠密発言
 @bot.tree.command(name="say", description="【管理者専用】Botに喋らせます")
 @app_commands.checks.has_permissions(administrator=True)
 async def say(interaction: discord.Interaction, message: str):
     sent = await interaction.channel.send(message)
     await interaction.response.send_message(f"送信完了！ 修正用ID: `{sent.id}`", ephemeral=True)
 
-# メッセージ修正
 @bot.tree.command(name="edit", description="【管理者専用】Botのメッセージを書き換えます")
 @app_commands.checks.has_permissions(administrator=True)
 async def edit(interaction: discord.Interaction, message_id: str, new_text: str):
@@ -165,7 +153,6 @@ async def edit(interaction: discord.Interaction, message_id: str, new_text: str)
     except:
         await interaction.response.send_message("❌ メッセージが見つかりませんでした", ephemeral=True)
 
-# 応答確認
 @bot.tree.command(name="ping", description="Botの応答速度を確認します")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message(f"Pong! {round(bot.latency * 1000)}ms", ephemeral=True)
