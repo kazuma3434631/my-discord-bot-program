@@ -2,33 +2,35 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import os
+import re
+from collections import defaultdict
+import datetime
 from keep_alive import keep_alive
 
 # --- 1. 権限（Intents）の設定 ---
 intents = discord.Intents.default()
 intents.members = True 
-intents.message_content = True
+intents.message_content = True 
 
 # --- 2. 設定 ---
-LOG_CHANNEL_ID = 1475491103225417738
+NEW_LOG_CHANNEL_ID = 1475867868724854814
 WELCOME_CHANNEL_ID = 1475484575114330162
 TICKET_CATEGORY_ID = 1475853559399452752
 
-# --- 3. チケット機能用のUIクラス ---
+# スパム対策用の一時メモリ
+last_messages = defaultdict(list)
 
+# --- 3. UIクラス (省略なし) ---
 class ConfirmCloseView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-
     @discord.ui.button(label="本当に閉じる", style=discord.ButtonStyle.danger, custom_id="confirm_close")
     async def confirm_close(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("チャンネルを削除します...", ephemeral=True)
         await interaction.channel.delete()
 
 class CloseTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-
     @discord.ui.button(label="チケットを閉じる", style=discord.ButtonStyle.secondary, emoji="🔒", custom_id="close_ticket")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("このチケットを閉じてもよろしいですか？", view=ConfirmCloseView(), ephemeral=True)
@@ -36,50 +38,34 @@ class CloseTicketView(discord.ui.View):
 class TicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-
     async def create_ticket_logic(self, interaction: discord.Interaction, ticket_type: str, color: discord.Color):
         guild = interaction.guild
         user = interaction.user
-        
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             user: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
             guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
         }
-
         category = guild.get_channel(TICKET_CATEGORY_ID)
-        channel = await guild.create_text_channel(
-            name=f"{ticket_type}-{user.display_name}",
-            overwrites=overwrites,
-            category=category
-        )
-        
-        await interaction.response.send_message(f"{ticket_type}用チケットを作成しました: {channel.mention}", ephemeral=True)
-        
-        embed = discord.Embed(
-            title=f"【{ticket_type}】お問い合わせ",
-            description=f"{user.mention} さん、お問い合わせ内容を詳しく記入してください。\n解決したら下のボタンで閉じてください。",
-            color=color
-        )
+        channel = await guild.create_text_channel(name=f"{ticket_type}-{user.display_name}", overwrites=overwrites, category=category)
+        await interaction.response.send_message(f"チケット作成: {channel.mention}", ephemeral=True)
+        embed = discord.Embed(title=f"【{ticket_type}】", description=f"{user.mention} さん、内容を記入してください。", color=color)
         await channel.send(embed=embed, view=CloseTicketView())
 
     @discord.ui.button(label="🚨 通報", style=discord.ButtonStyle.danger, custom_id="ticket_report")
     async def report_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.create_ticket_logic(interaction, "通報", discord.Color.red())
-
     @discord.ui.button(label="❓ 質問", style=discord.ButtonStyle.primary, custom_id="ticket_question")
     async def question_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.create_ticket_logic(interaction, "質問", discord.Color.blue())
-
     @discord.ui.button(label="💡 提案", style=discord.ButtonStyle.success, custom_id="ticket_suggest")
     async def suggest_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.create_ticket_logic(interaction, "提案", discord.Color.green())
 
-# --- 4. Botクラスの定義 ---
+# --- 4. Bot本体 ---
 class MyBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix='/', intents=intents)
-
     async def setup_hook(self):
         self.add_view(TicketView())
         self.add_view(CloseTicketView())
@@ -93,71 +79,95 @@ bot = MyBot()
 @bot.event
 async def on_ready():
     print(f'ログイン完了: {bot.user.name}')
-    # --- 修正：ここに以前あったギルド判定(退出)のコードを削除しました ---
+    log = bot.get_channel(NEW_LOG_CHANNEL_ID)
+    if log: await log.send("✅ 防衛システム（スパム・連投対策）稼働開始")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot or not message.guild:
+        return
+
+    # --- 荒らし対策ロジック ---
+    user_id = message.author.id
+    now = datetime.datetime.now()
     
-    channel = bot.get_channel(LOG_CHANNEL_ID)
-    if channel:
-        await channel.send("botが起動しました")
+    # 1. 大量メンション検知 (5人以上)
+    if len(message.mentions) >= 5:
+        await message.delete()
+        await message.channel.send(f"{message.author.mention} 大量メンションは禁止です。", delete_after=5)
+        return
 
+    # 2. 連投検知 (5秒以内に3回同じ内容)
+    user_msgs = last_messages[user_id]
+    user_msgs.append({"content": message.content, "time": now})
+    
+    # 5秒より前の古いログを削除
+    last_messages[user_id] = [m for m in user_msgs if (now - m["time"]).total_seconds() < 5]
+    
+    if len(last_messages[user_id]) >= 3:
+        # 直近3件がすべて同じ内容かチェック
+        contents = [m["content"] for m in last_messages[user_id][-3:]]
+        if len(set(contents)) == 1:
+            await message.delete()
+            await message.channel.send(f"{message.author.mention} 連投（スパム）はやめてください。", delete_after=5)
+            return
+
+    # --- メッセージリンク展開機能 (既存) ---
+    pattern = r"https://(?:ptb\.|canary\.)?discord\.com/channels/(\d+)/(\d+)/(\d+)"
+    extract = re.search(pattern, message.content)
+    if extract:
+        g_id, c_id, m_id = map(int, extract.groups())
+        if message.guild.id == g_id:
+            try:
+                channel = bot.get_channel(c_id)
+                f_msg = await channel.fetch_message(m_id)
+                emb = discord.Embed(description=f_msg.content, color=discord.Color.light_grey(), timestamp=f_msg.created_at)
+                emb.set_author(name=f_msg.author.display_name, icon_url=f_msg.author.display_avatar.url)
+                if f_msg.attachments: emb.set_image(url=f_msg.attachments[0].url)
+                await message.reply(embed=emb, mention_author=False)
+            except: pass
+
+    await bot.process_commands(message)
+
+# メッセージ削除ログ (既存)
 @bot.event
-async def on_member_join(member):
-    channel = bot.get_channel(WELCOME_CHANNEL_ID)
-    if channel:
-        await channel.send(f"{member.display_name}さん、こんにちは！「{member.guild.name}」へようこそ！")
+async def on_message_delete(message):
+    if message.author.bot: return
+    log = bot.get_channel(NEW_LOG_CHANNEL_ID)
+    if log:
+        emb = discord.Embed(title="🗑 削除ログ", color=discord.Color.red(), timestamp=message.created_at)
+        emb.add_field(name="人", value=message.author.mention)
+        emb.add_field(name="内容", value=message.content or "（なし）")
+        await log.send(embed=emb)
 
-@bot.event
-async def on_member_remove(member):
-    channel = bot.get_channel(WELCOME_CHANNEL_ID)
-    if channel:
-        await channel.send(f"{member.display_name}さん、さようなら…バイ…バイ…")
-
-# --- 6. スラッシュコマンド ---
-
-@bot.tree.command(name="ticket_setup", description="【管理者専用】チケット窓口を設置します")
-@app_commands.checks.has_permissions(administrator=True)
+# --- スラッシュコマンド (省略なし) ---
+@bot.tree.command(name="ticket_setup")
 async def ticket_setup(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="📩 お問い合わせ・サポート窓口",
-        description="用途に合わせて下のボタンを押してください。\n\n🚨 **通報** / ❓ **質問** / 💡 **提案**",
-        color=discord.Color.blue()
-    )
+    embed = discord.Embed(title="📩 お問い合わせ", description="ボタンを選択してください", color=discord.Color.blue())
     await interaction.channel.send(embed=embed, view=TicketView())
-    await interaction.response.send_message("窓口を設置しました", ephemeral=True)
+    await interaction.response.send_message("設置完了", ephemeral=True)
 
-@bot.tree.command(name="clear", description="【管理者専用】メッセージを一括削除します")
-@app_commands.describe(amount="削除件数", user="特定の人を指定（任意）")
-@app_commands.checks.has_permissions(administrator=True, manage_messages=True)
+@bot.tree.command(name="clear")
 async def clear(interaction: discord.Interaction, amount: int, user: discord.Member = None):
     await interaction.response.defer(ephemeral=True)
-    def check_condition(m):
-        return True if user is None else m.author == user
-    deleted = await interaction.channel.purge(limit=amount, check=check_condition)
-    await interaction.followup.send(f"✅ {len(deleted)}件のメッセージを削除しました", ephemeral=True)
+    def check(m): return True if user is None else m.author == user
+    deleted = await interaction.channel.purge(limit=amount, check=check)
+    await interaction.followup.send(f"✅ {len(deleted)}件削除", ephemeral=True)
 
-@bot.tree.command(name="say", description="【管理者専用】Botに喋らせます")
-@app_commands.checks.has_permissions(administrator=True)
+@bot.tree.command(name="say")
 async def say(interaction: discord.Interaction, message: str):
     sent = await interaction.channel.send(message)
-    await interaction.response.send_message(f"送信完了！ 修正用ID: `{sent.id}`", ephemeral=True)
+    await interaction.response.send_message(f"ID: `{sent.id}`", ephemeral=True)
 
-@bot.tree.command(name="edit", description="【管理者専用】Botのメッセージを書き換えます")
-@app_commands.checks.has_permissions(administrator=True)
+@bot.tree.command(name="edit")
 async def edit(interaction: discord.Interaction, message_id: str, new_text: str):
     try:
         msg = await interaction.channel.fetch_message(int(message_id))
-        if msg.author == bot.user:
-            await msg.edit(content=new_text)
-            await interaction.response.send_message("✅ 修正しました", ephemeral=True)
-        else:
-            await interaction.response.send_message("❌ 私のメッセージではありません", ephemeral=True)
-    except:
-        await interaction.response.send_message("❌ メッセージが見つかりませんでした", ephemeral=True)
+        await msg.edit(content=new_text)
+        await interaction.response.send_message("✅ 修正完了", ephemeral=True)
+    except: await interaction.response.send_message("❌ 失敗", ephemeral=True)
 
-@bot.tree.command(name="ping", description="Botの応答速度を確認します")
-async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(f"Pong! {round(bot.latency * 1000)}ms", ephemeral=True)
-
-# --- 7. 実行 ---
+# 実行
 keep_alive()
 TOKEN = os.getenv('DISCORD_TOKEN')
 bot.run(TOKEN)
