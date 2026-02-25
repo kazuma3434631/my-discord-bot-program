@@ -133,17 +133,55 @@ async def on_voice_state_update(member, before, after):
 @bot.event
 async def on_message(message):
     if message.author.bot or not message.guild: return
+
+    # --- あいさつ反応ロジック ---
+    now_hour = datetime.datetime.now().hour
+    content = message.content
+
+    if "おはよう" in content:
+        if 6 <= now_hour < 11:
+            await message.channel.send(f"「{message.author.mention}、おはよう！今日もいい一日になりそうだね！」")
+        elif 11 <= now_hour < 18:
+            await message.channel.send(f"「{message.author.mention}、おはよう…かな？今はもう『こんにちは』の時間だよ！えへへ、寝坊しちゃった？」")
+        elif 19 <= now_hour or now_hour < 5:
+            await message.channel.send(f"「わわっ、{message.author.mention}！今は夜だよ？『こんばんは』か『おやすみ』じゃないかな？」")
+        elif 5 <= now_hour < 6:
+            await message.channel.send(f"「{message.author.mention}、おはよう！すっごく早起きだね！ボクも目が覚めちゃった！」")
+        return
+
+    if "こんにちは" in content:
+        if 11 <= now_hour < 18:
+            await message.channel.send(f"「{message.author.mention}、こんにちは！お外はどんな感じ？」")
+        elif 5 <= now_hour < 11:
+            await message.channel.send(f"「{message.author.mention}、こんにちは！…にはちょっと早いかな？今は『おはよう』の時間だよ！」")
+        else:
+            await message.channel.send(f"「{message.author.mention}、こんにちは！…って、今はもう暗いよ？『こんばんは』の時間だね！」")
+        return
+
+    if "おやすみ" in content:
+        if 20 <= now_hour or now_hour < 5:
+            await message.channel.send(f"「{message.author.mention}、おやすみ！ゆっくり休んで、また明日も遊ぼうね！」")
+        elif 11 <= now_hour < 16:
+            await message.channel.send(f"「{message.author.mention}、おやすみ！お昼寝かな？ボクも一緒に寝ちゃおうかな…」")
+        else:
+            await message.channel.send(f"「{message.author.mention}、おやすみ！…って、まだ寝ちゃうの？ちょっと早い気がするけど、お疲れ様！」")
+        return
+
+    # --- 防衛・リンク展開ロジック ---
     if len(message.mentions) >= 5:
         await message.delete()
         await message.channel.send(f"「わわっ！{message.author.mention}、そんなにたくさん呼んだらみんなびっくりしちゃうよ！大量メンションはやめてね」", delete_after=5)
         return
+    
     u_id, now = message.author.id, datetime.datetime.now()
     last_messages[u_id].append({"content": message.content, "time": now})
     last_messages[u_id] = [m for m in last_messages[u_id] if (now - m["time"]).total_seconds() < 5]
+    
     if len(last_messages[u_id]) >= 3 and len(set(m["content"] for m in last_messages[u_id][-3:])) == 1:
         await message.delete()
         await message.channel.send(f"「{message.author.mention}、同じことを何度も送るのは控えてね。みんなと楽しくお話ししよう！」", delete_after=5)
         return
+
     extract = re.search(r"https://(?:ptb\.|canary\.)?discord\.com/channels/(\d+)/(\d+)/(\d+)", message.content)
     if extract:
         g, c, m = map(int, extract.groups())
