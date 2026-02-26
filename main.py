@@ -24,6 +24,8 @@ VC_CREATOR_ID = 1475482867818827829
 # 管理用メモリ
 last_messages = defaultdict(list)
 temp_channels = [] 
+
+# 日本時間のタイムゾーン定義
 JST = timezone(timedelta(hours=+9))
 
 # --- 3. UIクラス（役職・チケット） ---
@@ -135,7 +137,6 @@ bot = MyBot()
 @bot.event
 async def on_ready():
     print(f'ログイン完了: {bot.user.name}')
-    # 起動通知を専用チャンネルに送信
     sys_log = bot.get_channel(SYSTEM_LOG_ID)
     if sys_log:
         try: await sys_log.send("✅ **「準備完了！ボク、いつでもいけるよ！」**")
@@ -277,6 +278,19 @@ async def ticket_setup(it: discord.Interaction):
     await it.channel.send(content, view=TicketView())
     await it.response.send_message("「窓口を置いたよ！何かあればいつでも呼んでね！」", ephemeral=True)
 
+@bot.tree.command(name="edit", description="Botが送ったメッセージを書き換えるよ")
+@app_commands.describe(message_id="書き換えたいメッセージのID", new_content="新しい内容")
+@app_commands.checks.has_permissions(administrator=True)
+async def edit(it: discord.Interaction, message_id: str, new_content: str):
+    await it.response.defer(ephemeral=True)
+    try:
+        target_msg = await it.channel.fetch_message(int(message_id))
+        if target_msg.author.id != bot.user.id:
+            return await it.followup.send("「そのメッセージはボクが書いたものじゃないみたい…」", ephemeral=True)
+        await target_msg.edit(content=new_content)
+        await it.followup.send("✅ 「えいっ！メッセージを書き換えておいたよ！」", ephemeral=True)
+    except: await it.followup.send("「書き換えに失敗しちゃった。IDやチャンネルを確認してね！」", ephemeral=True)
+
 @bot.tree.command(name="clear", description="お掃除するよ")
 @app_commands.checks.has_permissions(manage_messages=True)
 async def clear(it: discord.Interaction, amount: int):
@@ -295,33 +309,22 @@ async def ping(it: discord.Interaction):
     ping_val = round(bot.latency * 1000)
     await it.response.send_message(f"「ボクは元気だよ！通信速度は {ping_val}ms だよ。」", ephemeral=True)
 
-@bot.tree.command(name="ban", description="悪い人をプププランドから追い出すよ")
+@bot.tree.command(name="ban", description="追い出すよ")
 @app_commands.checks.has_permissions(ban_members=True)
 async def ban(it: discord.Interaction, member: discord.Member, reason: str = "特にないみたい"):
     try:
         await member.ban(reason=reason)
         await it.response.send_message(f"「えいっ！{member.display_name}を追い出したよ。理由は『{reason}』だね。」")
-    except:
-        await it.response.send_message("「ごめんね、ボクの力じゃその人を追い出せなかったよ…」", ephemeral=True)
+    except: await it.response.send_message("「追い出せなかったよ…」", ephemeral=True)
 
-@bot.tree.command(name="timeout", description="少しの間、静かにしてもらうよ")
+@bot.tree.command(name="timeout", description="静かにしてもらうよ")
 @app_commands.checks.has_permissions(moderate_members=True)
 async def timeout(it: discord.Interaction, member: discord.Member, minutes: int, reason: str = "特にないみたい"):
     try:
         duration = datetime.timedelta(minutes=minutes)
         await member.timeout(duration, reason=reason)
         await it.response.send_message(f"「{member.display_name}に、{minutes}分間お休みしてもらうことにしたよ。」")
-    except:
-        await it.response.send_message("「うまくできなかったみたい。ボクより強い権限の人には効かないんだ…」", ephemeral=True)
-
-@bot.tree.command(name="kick", description="一度サーバーから退出してもらうよ")
-@app_commands.checks.has_permissions(kick_members=True)
-async def kick(it: discord.Interaction, member: discord.Member, reason: str = "特にないみたい"):
-    try:
-        await member.kick(reason=reason)
-        await it.response.send_message(f"「{member.display_name}に一度帰ってもらったよ。」")
-    except:
-        await it.response.send_message("「キックできなかったよ…」", ephemeral=True)
+    except: await it.response.send_message("「できなかったよ…」", ephemeral=True)
 
 # 実行
 keep_alive()
