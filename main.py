@@ -1,9 +1,10 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks # tasksを追加
 from discord import app_commands
 import os
 import re
 import datetime
+from datetime import timezone, timedelta
 from collections import defaultdict
 from keep_alive import keep_alive
 
@@ -22,6 +23,9 @@ VC_CREATOR_ID = 1475482867818827829
 # 管理用メモリ
 last_messages = defaultdict(list)
 temp_channels = [] 
+
+# 日本時間のタイムゾーン定義
+JST = timezone(timedelta(hours=+9))
 
 # --- 3. UIクラス（役職・チケット） ---
 
@@ -102,7 +106,19 @@ class MyBot(commands.Bot):
         self.add_view(CloseTicketView())
         self.add_view(ConfirmCloseView())
         self.add_view(RolePanelView())
+        self.update_status.start() # ステータス更新開始
         await self.tree.sync()
+
+    # --- ステータス更新タスク ---
+    @tasks.loop(seconds=60)
+    async def update_status(self):
+        ping = round(self.latency * 1000)
+        game = discord.Game(f"通信速度: {ping}ms | ボク、元気だよ！")
+        await self.change_presence(activity=game)
+
+    @update_status.before_loop
+    async def before_update_status(self):
+        await self.wait_until_ready()
 
 bot = MyBot()
 
@@ -134,8 +150,9 @@ async def on_voice_state_update(member, before, after):
 async def on_message(message):
     if message.author.bot or not message.guild: return
 
-    # --- あいさつ反応ロジック ---
-    now_hour = datetime.datetime.now().hour
+    # --- あいさつ反応ロジック (日本時間対応) ---
+    now_jst = datetime.datetime.now(JST)
+    now_hour = now_jst.hour
     content = message.content
 
     if "おはよう" in content:
@@ -173,7 +190,7 @@ async def on_message(message):
         await message.channel.send(f"「わわっ！{message.author.mention}、そんなにたくさん呼んだらみんなびっくりしちゃうよ！大量メンションはやめてね」", delete_after=5)
         return
     
-    u_id, now = message.author.id, datetime.datetime.now()
+    u_id, now = message.author.id, datetime.datetime.now(JST)
     last_messages[u_id].append({"content": message.content, "time": now})
     last_messages[u_id] = [m for m in last_messages[u_id] if (now - m["time"]).total_seconds() < 5]
     
