@@ -280,6 +280,36 @@ async def say(it: discord.Interaction, message: str):
 async def ping(it: discord.Interaction):
     await it.response.send_message(f"「ボクは元気だよ！通信速度は {round(bot.latency * 1000)}ms だよ。これからもよろしくね！」", ephemeral=True)
 
+# --- 管理用コマンド（BAN・タイムアウト・キック） ---
+
+@bot.tree.command(name="ban", description="悪い人をプププランドから追い出すよ")
+@app_commands.checks.has_permissions(ban_members=True)
+async def ban(it: discord.Interaction, member: discord.Member, reason: str = "特にないみたい"):
+    try:
+        await member.ban(reason=reason)
+        await it.response.send_message(f"「えいっ！{member.display_name}を追い出したよ。理由は『{reason}』だね。これでみんな安心だよ！」")
+    except:
+        await it.response.send_message("「ごめんね、ボクの力じゃその人を追い出せなかったよ…（権限を確認してね）」", ephemeral=True)
+
+@bot.tree.command(name="timeout", description="少しの間、静かにしてもらうよ")
+@app_commands.checks.has_permissions(moderate_members=True)
+async def timeout(it: discord.Interaction, member: discord.Member, minutes: int, reason: str = "特にないみたい"):
+    try:
+        duration = datetime.timedelta(minutes=minutes)
+        await member.timeout(duration, reason=reason)
+        await it.response.send_message(f"「{member.display_name}に、{minutes}分間お休みしてもらうことにしたよ。理由は『{reason}』だよ。少し反省してくれるといいな…」")
+    except:
+        await it.response.send_message("「うまくできなかったみたい。ボクより強い権限の人には効かないんだ…」", ephemeral=True)
+
+@bot.tree.command(name="kick", description="一度サーバーから退出してもらうよ")
+@app_commands.checks.has_permissions(kick_members=True)
+async def kick(it: discord.Interaction, member: discord.Member, reason: str = "特にないみたい"):
+    try:
+        await member.kick(reason=reason)
+        await it.response.send_message(f"「{member.display_name}に一度帰ってもらったよ。理由は『{reason}』だよ。」")
+    except:
+        await it.response.send_message("「キックできなかったよ…。権限の設定を見てみてね！」", ephemeral=True)
+
 # 実行
 keep_alive()
 bot.run(os.getenv('DISCORD_TOKEN'))
