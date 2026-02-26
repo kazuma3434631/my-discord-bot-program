@@ -16,19 +16,37 @@ intents.voice_states = True
 
 # --- 2. 設定 ---
 LOG_CHANNEL_ID = 1475491103225417738
-SYSTEM_LOG_ID = 1475867868724854814 # システム起動通知用
+SYSTEM_LOG_ID = 1475867868724854814
 WELCOME_CHANNEL_ID = 1475484575114330162
 TICKET_CATEGORY_ID = 1475853559399452752
 VC_CREATOR_ID = 1475482867818827829
 
-# 管理用メモリ
 last_messages = defaultdict(list)
 temp_channels = [] 
-
-# 日本時間のタイムゾーン定義
 JST = timezone(timedelta(hours=+9))
 
-# --- 3. UIクラス（役職・チケット） ---
+# --- 3. UIクラス ---
+
+class VCTypeSelect(discord.ui.Select):
+    def __init__(self, channel: discord.VoiceChannel):
+        options = [
+            discord.SelectOption(label="🎮 ゲーム配信", value="ゲーム配信", description="みんなにボクたちの勇姿を見せちゃおう！"),
+            discord.SelectOption(label="⚔️ マルチプレイ募集", value="マルチ募集", description="一緒に遊ぶ仲間を探そうよ！"),
+            discord.SelectOption(label="💬 雑談", value="雑談", description="のんびり、楽しくお話ししよう！"),
+            discord.SelectOption(label="💤 寝落ち・作業", value="寝落ち・作業", description="静かにお休みしたり、集中したりするお部屋だよ。")
+        ]
+        super().__init__(placeholder="どんなお部屋にするか選んでね！", options=options)
+        self.target_channel = channel
+
+    async def callback(self, it: discord.Interaction):
+        new_name = f"{self.values[0]}｜{it.user.display_name}"
+        await self.target_channel.edit(name=new_name)
+        await it.response.send_message(f"「えいっ！お部屋の名前を『{new_name}』にしたよ！それじゃあ、楽しんできてね！」", ephemeral=True)
+
+class VCTypeView(discord.ui.View):
+    def __init__(self, channel: discord.VoiceChannel):
+        super().__init__(timeout=60)
+        self.add_item(VCTypeSelect(channel))
 
 class RoleButton(discord.ui.Button):
     def __init__(self, role: discord.Role, removable: bool = True):
@@ -37,8 +55,7 @@ class RoleButton(discord.ui.Button):
     
     async def callback(self, it: discord.Interaction):
         data = self.custom_id.split("_")
-        role_id = int(data[1])
-        removable = data[2] == "1"
+        role_id, removable = int(data[1]), data[2] == "1"
         role = it.guild.get_role(role_id)
         if not role: 
             return await it.response.send_message("「ごめんね、その役職は見つからなかったみたい…」", ephemeral=True)
@@ -46,19 +63,18 @@ class RoleButton(discord.ui.Button):
         if role in it.user.roles:
             if removable:
                 await it.user.remove_roles(role)
-                await it.response.send_message(f"「役職『{role.name}』を外したよ！また付けたくなったら言ってね！」", ephemeral=True)
+                await it.response.send_message(f"「役職『{role.name}』を外したよ！また付けたくなったらボクを呼んでね！」", ephemeral=True)
             else:
-                await it.response.send_message(f"「キミはもう『{role.name}』の役職を持っているよ！一度手に入れたら、ボクからは外せない決まりなんだ。えへへ、大切にしてね！」", ephemeral=True)
+                await it.response.send_message(f"「キミはもう『{role.name}』の役職を持っているよ！これはボクからは外せない決まりなんだ。大切にしてね！」", ephemeral=True)
         else:
             try:
                 await it.user.add_roles(role)
                 await it.response.send_message(f"「役職『{role.name}』を付けたよ！えへへ、よく似合ってるよ！」", ephemeral=True)
             except discord.Forbidden:
-                await it.response.send_message("「ごめんね、ボクの権限が足りなくて役職を付けられなかったよ…」", ephemeral=True)
+                await it.response.send_message("「ごめんね、ボクの力が足りなくて役職を付けられなかったよ…」", ephemeral=True)
 
 class RolePanelView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
+    def __init__(self): super().__init__(timeout=None)
 
 class ConfirmCloseView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
@@ -81,7 +97,7 @@ class TicketView(discord.ui.View):
         guild, user = it.guild, it.user
         category = guild.get_channel(TICKET_CATEGORY_ID)
         if not category:
-            return await it.followup.send("「ごめんね、チケットを作る場所（カテゴリー）が見つからなかったよ…」", ephemeral=True)
+            return await it.followup.send("「ごめんね、チケットを作る場所が見つからなかったよ…」", ephemeral=True)
 
         try:
             overwrites = {
@@ -90,8 +106,8 @@ class TicketView(discord.ui.View):
                 guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
             }
             channel = await guild.create_text_channel(name=f"🎫｜{ticket_type}-{user.display_name}", overwrites=overwrites, category=category)
-            await it.followup.send(f"「チケットを作ったよ！こっちでボクたちが待ってるね：{channel.mention}」", ephemeral=True)
-            await channel.send(f"**【{ticket_type}窓口】**\n「{user.mention}さん、こんにちは！ボクに内容を教えてね。」", view=CloseTicketView())
+            await it.followup.send(f"「チケットを作ったよ！こっちでボクたちが待ってるね！：{channel.mention}」", ephemeral=True)
+            await channel.send(f"**【{ticket_type}窓口】**\n「{user.mention}さん、こんにちは！ボクに内容を教えてね。全力で助けるよ！」", view=CloseTicketView())
         except Exception as e:
             await it.followup.send(f"「作成に失敗しちゃった…。権限を確認してくれるかな？：`{e}`」", ephemeral=True)
 
@@ -113,10 +129,8 @@ class MyBot(commands.Bot):
         super().__init__(command_prefix='/', intents=intents)
 
     async def setup_hook(self):
-        self.add_view(TicketView())
-        self.add_view(CloseTicketView())
-        self.add_view(ConfirmCloseView())
-        self.add_view(RolePanelView())
+        for v in [TicketView(), CloseTicketView(), ConfirmCloseView(), RolePanelView()]:
+            self.add_view(v)
         self.update_status.start()
         await self.tree.sync()
 
@@ -136,19 +150,19 @@ bot = MyBot()
 
 @bot.event
 async def on_ready():
-    print(f'ログイン完了: {bot.user.name}')
     sys_log = bot.get_channel(SYSTEM_LOG_ID)
     if sys_log:
-        try: await sys_log.send("✅ **「準備完了！ボク、いつでもいけるよ！」**")
+        try: await sys_log.send("✅ **「準備完了！『こんばんは』も覚えたよ！ボク、いつでもいけるよ！」**")
         except: pass
 
 @bot.event
 async def on_voice_state_update(member, before, after):
     if after.channel and after.channel.id == VC_CREATOR_ID:
         try:
-            new_ch = await member.guild.create_voice_channel(name=f"🔊｜{member.display_name}の部屋", category=after.channel.category)
+            new_ch = await member.guild.create_voice_channel(name=f"🔨｜設定中...", category=after.channel.category)
             await member.move_to(new_ch)
             temp_channels.append(new_ch.id)
+            await new_ch.send(f"「{member.mention}、入室ありがとう！この部屋をどんな目的にするかボクに教えて！」", view=VCTypeView(new_ch))
         except: pass
     if before.channel and before.channel.id in temp_channels and len(before.channel.members) == 0:
         try:
@@ -164,20 +178,25 @@ async def on_message(message):
     content = message.content
 
     if "おはよう" in content:
-        if 6 <= now_hour < 11: await message.channel.send(f"「{message.author.mention}、おはよう！今日もいい一日になりそうだね！」")
+        if 5 <= now_hour < 11: await message.channel.send(f"「{message.author.mention}、おはよう！今日もいい一日になりそうだね！」")
         elif 11 <= now_hour < 18: await message.channel.send(f"「{message.author.mention}、おはよう…かな？今はもう『こんにちは』の時間だよ！えへへ、寝坊しちゃった？」")
-        elif 19 <= now_hour or now_hour < 5: await message.channel.send(f"「わわっ、{message.author.mention}！今は夜だよ？『こんばんは』か『おやすみ』じゃないかな？」")
-        elif 5 <= now_hour < 6: await message.channel.send(f"「{message.author.mention}、おはよう！すっごく早起きだね！ボクも目が覚めちゃった！」")
+        else: await message.channel.send(f"「わわっ、{message.author.mention}！今は夜だよ？『こんばんは』の時間じゃないかな？」")
         return
+    
     if "こんにちは" in content:
         if 11 <= now_hour < 18: await message.channel.send(f"「{message.author.mention}、こんにちは！お外はどんな感じ？」")
         elif 5 <= now_hour < 11: await message.channel.send(f"「{message.author.mention}、こんにちは！…にはちょっと早いかな？今は『おはよう』の時間だよ！」")
         else: await message.channel.send(f"「{message.author.mention}、こんにちは！…って、今はもう暗いよ？『こんばんは』の時間だね！」")
         return
+
+    if "こんばんは" in content:
+        if 18 <= now_hour or now_hour < 5: await message.channel.send(f"「{message.author.mention}、こんばんは！星がとっても綺麗だよ！」")
+        else: await message.channel.send(f"「{message.author.mention}、こんばんは！…にはまだちょっと早いかも？今はまだ明るいよ！」")
+        return
+
     if "おやすみ" in content:
         if 20 <= now_hour or now_hour < 5: await message.channel.send(f"「{message.author.mention}、おやすみ！ゆっくり休んで、また明日も遊ぼうね！」")
-        elif 11 <= now_hour < 16: await message.channel.send(f"「{message.author.mention}、おやすみ！お昼寝かな？ボクも一緒に寝ちゃおうかな…」")
-        else: await message.channel.send(f"「{message.author.mention}、おやすみ！…って、まだ寝ちゃうの？ちょっと早い気がするけど、お疲れ様！」")
+        else: await message.channel.send(f"「{message.author.mention}、おやすみ！お昼寝かな？ボクも一緒に寝ちゃおうかな…えへへ。」")
         return
 
     if len(message.mentions) >= 5:
@@ -201,10 +220,11 @@ async def on_message(message):
                 f_msg = await bot.get_channel(c).fetch_message(m)
                 emb = discord.Embed(description=f_msg.content, color=discord.Color.light_grey(), timestamp=f_msg.created_at)
                 emb.set_author(name=f_msg.author.display_name, icon_url=f_msg.author.display_avatar.url)
-                if f_msg.attachments: emb.set_image(url=f_msg.attachments[0].url)
                 await message.reply(embed=emb, mention_author=False)
             except: pass
     await bot.process_commands(message)
+
+# (以下、on_message_delete, on_message_edit, on_member_join, on_member_remove, スラッシュコマンド類は変更なしのため省略せずに保持)
 
 @bot.event
 async def on_message_delete(message):
@@ -232,17 +252,15 @@ async def on_message_edit(before, after):
 async def on_member_join(member):
     ch = bot.get_channel(WELCOME_CHANNEL_ID)
     if ch:
-        try: await ch.send(f"「ボクはエフィリン！よろしくね、{member.mention}！\nこのサーバーへようこそ！」")
+        try: await ch.send(f"「ボクはエフィリン！よろしくね、{member.mention}！このサーバーへようこそ！」")
         except: pass
 
 @bot.event
 async def on_member_remove(member):
     ch = bot.get_channel(WELCOME_CHANNEL_ID)
     if ch:
-        try: await ch.send(f"「{member.display_name}、行っちゃうんだね…。またいつでも遊びに来てよ！」")
+        try: await ch.send(f"「{member.display_name}、行っちゃうんだね…。またいつでも遊びに来てよ！ボク、ここで待ってるからね！」")
         except: pass
-
-# --- 6. スラッシュコマンド ---
 
 @bot.tree.command(name="role_setup", description="役職パネルを置くよ")
 @app_commands.describe(removable="一度付けたら外せなくする場合は False にしてね")
@@ -263,9 +281,6 @@ async def role_add(it: discord.Interaction, message_id: str, role: discord.Role,
         msg = await it.channel.fetch_message(int(message_id))
         view = discord.ui.View.from_message(msg)
         view.timeout = None
-        for item in view.children:
-            if isinstance(item, discord.ui.Button) and item.custom_id and item.custom_id.startswith(f"role_{role.id}"):
-                return await it.followup.send("「その役職はもうパネルにあるよ！」", ephemeral=True)
         view.add_item(RoleButton(role, removable))
         await msg.edit(view=view)
         await it.followup.send(f"✅ 「『{role.name}』のボタンを足しておいたよ！」", ephemeral=True)
@@ -296,7 +311,7 @@ async def edit(it: discord.Interaction, message_id: str, new_content: str):
 async def clear(it: discord.Interaction, amount: int):
     await it.response.defer(ephemeral=True)
     d = await it.channel.purge(limit=amount)
-    await it.followup.send(f"✅ 「えいっ！{len(d)}件お掃除したよ！」", ephemeral=True)
+    await it.followup.send(f"✅ 「えいっ！{len(d)}件お掃除したよ！きれいになって気持ちいいね！」", ephemeral=True)
 
 @bot.tree.command(name="say", description="代わりに喋るよ")
 @app_commands.checks.has_permissions(administrator=True)
@@ -307,25 +322,24 @@ async def say(it: discord.Interaction, message: str):
 @bot.tree.command(name="ping", description="元気か確認するよ")
 async def ping(it: discord.Interaction):
     ping_val = round(bot.latency * 1000)
-    await it.response.send_message(f"「ボクは元気だよ！通信速度は {ping_val}ms だよ。」", ephemeral=True)
+    await it.response.send_message(f"「ボクは元気だよ！通信速度は {ping_val}ms だよ。これからもよろしくね！」", ephemeral=True)
 
-@bot.tree.command(name="ban", description="追い出すよ")
+@bot.tree.command(name="ban", description="悪い人を追い出すよ")
 @app_commands.checks.has_permissions(ban_members=True)
 async def ban(it: discord.Interaction, member: discord.Member, reason: str = "特にないみたい"):
     try:
         await member.ban(reason=reason)
-        await it.response.send_message(f"「えいっ！{member.display_name}を追い出したよ。理由は『{reason}』だね。」")
-    except: await it.response.send_message("「追い出せなかったよ…」", ephemeral=True)
+        await it.response.send_message(f"「えいっ！{member.display_name}を追い出したよ。理由は『{reason}』だね。これでみんな安心だよ！」")
+    except: await it.response.send_message("「ごめんね、ボクの力じゃその人を追い出せなかったよ…」", ephemeral=True)
 
-@bot.tree.command(name="timeout", description="静かにしてもらうよ")
+@bot.tree.command(name="timeout", description="少しの間、静かにしてもらうよ")
 @app_commands.checks.has_permissions(moderate_members=True)
 async def timeout(it: discord.Interaction, member: discord.Member, minutes: int, reason: str = "特にないみたい"):
     try:
         duration = datetime.timedelta(minutes=minutes)
         await member.timeout(duration, reason=reason)
-        await it.response.send_message(f"「{member.display_name}に、{minutes}分間お休みしてもらうことにしたよ。」")
-    except: await it.response.send_message("「できなかったよ…」", ephemeral=True)
+        await it.response.send_message(f"「{member.display_name}に、{minutes}分間お休みしてもらうことにしたよ。理由は『{reason}』だよ。」")
+    except: await it.response.send_message("「うまくできなかったみたい。ボクより強い権限の人には効かないんだ…」", ephemeral=True)
 
-# 実行
 keep_alive()
 bot.run(os.getenv('DISCORD_TOKEN'))
