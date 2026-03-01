@@ -4,6 +4,7 @@ from discord import app_commands
 import os
 import re
 import datetime
+import random
 from datetime import timezone, timedelta
 from collections import defaultdict
 from keep_alive import keep_alive
@@ -74,7 +75,8 @@ class RoleButton(discord.ui.Button):
                 await it.response.send_message("「ごめんね、ボクの力が足りなくて役職を付けられなかったよ…」", ephemeral=True)
 
 class RolePanelView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
+    def __init__(self): 
+        super().__init__(timeout=None)
 
 class ConfirmCloseView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
@@ -96,8 +98,16 @@ class TicketView(discord.ui.View):
         await it.response.defer(ephemeral=True)
         guild, user = it.guild, it.user
         category = guild.get_channel(TICKET_CATEGORY_ID)
+        
         if not category:
             return await it.followup.send("「ごめんね、チケットを作る場所が見つからなかったよ…」", ephemeral=True)
+
+        existing_ticket = discord.utils.get(category.text_channels, name=f"🎫｜通報-{user.display_name.lower()}") or \
+                          discord.utils.get(category.text_channels, name=f"🎫｜質問-{user.display_name.lower()}") or \
+                          discord.utils.get(category.text_channels, name=f"🎫｜提案-{user.display_name.lower()}")
+        
+        if existing_ticket:
+            return await it.followup.send(f"「わわっ！{user.mention}さん、もうチケットを開いているみたいだよ！まずはそっちでお話ししよう？：{existing_ticket.mention}」", ephemeral=True)
 
         try:
             overwrites = {
@@ -129,8 +139,11 @@ class MyBot(commands.Bot):
         super().__init__(command_prefix='/', intents=intents)
 
     async def setup_hook(self):
-        for v in [TicketView(), CloseTicketView(), ConfirmCloseView(), RolePanelView()]:
-            self.add_view(v)
+        self.add_view(TicketView())
+        self.add_view(CloseTicketView())
+        self.add_view(ConfirmCloseView())
+        self.add_view(RolePanelView())
+        
         self.update_status.start()
         await self.tree.sync()
 
@@ -152,7 +165,7 @@ bot = MyBot()
 async def on_ready():
     sys_log = bot.get_channel(SYSTEM_LOG_ID)
     if sys_log:
-        try: await sys_log.send("✅ **「準備完了！『こんばんは』も覚えたよ！ボク、いつでもいけるよ！」**")
+        try: await sys_log.send("✅ **「準備完了！設定を更新したよ。ボク、いつでもいけるよ！」**")
         except: pass
 
 @bot.event
@@ -178,25 +191,63 @@ async def on_message(message):
     content = message.content
 
     if "おはよう" in content:
-        if 5 <= now_hour < 11: await message.channel.send(f"「{message.author.mention}、おはよう！今日もいい一日になりそうだね！」")
-        elif 11 <= now_hour < 18: await message.channel.send(f"「{message.author.mention}、おはよう…かな？今はもう『こんにちは』の時間だよ！えへへ、寝坊しちゃった？」")
-        else: await message.channel.send(f"「わわっ、{message.author.mention}！今は夜だよ？『こんばんは』の時間じゃないかな？」")
+        if 5 <= now_hour < 11:
+            responses = [
+                f"「{message.author.mention}、おはよう！今日もいい一日になりそうだね！」",
+                f"「ふわぁ…おはよう、{message.author.mention}！朝ごはんは何食べる？」",
+                f"「おはよう！{message.author.mention}が来てくれて、ボク嬉しいな！」"
+            ]
+            await message.channel.send(random.choice(responses))
+        elif 11 <= now_hour < 18:
+            await message.channel.send(f"「{message.author.mention}、おはよう…かな？今はもう『こんにちは』の時間だよ！えへへ、寝坊しちゃった？」")
+        else:
+            await message.channel.send(f"「わわっ、{message.author.mention}！今は夜だよ？『こんばんは』の時間じゃないかな？」")
         return
     
     if "こんにちは" in content:
-        if 11 <= now_hour < 18: await message.channel.send(f"「{message.author.mention}、こんにちは！お外はどんな感じ？」")
-        elif 5 <= now_hour < 11: await message.channel.send(f"「{message.author.mention}、こんにちは！…にはちょっと早いかな？今は『おはよう』の時間だよ！」")
-        else: await message.channel.send(f"「{message.author.mention}、こんにちは！…って、今はもう暗いよ？『こんばんは』の時間だね！」")
+        if 11 <= now_hour < 18:
+            responses = [
+                f"「{message.author.mention}、こんにちは！お外はどんな感じ？」",
+                f"「こんにちは！{message.author.mention}、今日も元気そうだね！」",
+                f"「やぁ！{message.author.mention}、こんにちは！一緒に遊ぼうよ！」"
+            ]
+            await message.channel.send(random.choice(responses))
+        elif 5 <= now_hour < 11:
+            await message.channel.send(f"「{message.author.mention}、こんにちは！…にはちょっと早いかな？今は『おはよう』の時間だよ！」")
+        else:
+            await message.channel.send(f"「{message.author.mention}、こんにちは！…って, 今はもう暗いよ？『こんばんは』の時間だね！」")
         return
 
     if "こんばんは" in content:
-        if 18 <= now_hour or now_hour < 5: await message.channel.send(f"「{message.author.mention}、こんばんは！星がとっても綺麗だよ！」")
-        else: await message.channel.send(f"「{message.author.mention}、こんばんは！…にはまだちょっと早いかも？今はまだ明るいよ！」")
+        if 18 <= now_hour or now_hour < 5:
+            responses = [
+                f"「{message.author.mention}、こんばんは！星がとっても綺麗だよ！」",
+                f"「こんばんは、{message.author.mention}！今日はどんな一日だった？」",
+                f"「こんばんは！夜は冷えるから、暖かくして過ごしてね！」"
+            ]
+            await message.channel.send(random.choice(responses))
+        else:
+            await message.channel.send(f"「{message.author.mention}、こんばんは！…にはまだちょっと早いかも？今はまだ明るいよ！」")
         return
 
     if "おやすみ" in content:
-        if 20 <= now_hour or now_hour < 5: await message.channel.send(f"「{message.author.mention}、おやすみ！ゆっくり休んで、また明日も遊ぼうね！」")
-        else: await message.channel.send(f"「{message.author.mention}、おやすみ！お昼寝かな？ボクも一緒に寝ちゃおうかな…えへへ。」")
+        if 20 <= now_hour or now_hour < 5:
+            responses = [
+                f"「{message.author.mention}、おやすみ！ゆっくり休んで、また明日も遊ぼうね！」",
+                f"「おやすみなさい、{message.author.mention}。いい夢が見られますように…！」",
+                f"「ボクも眠くなってきちゃった…おやすみ、{message.author.mention}！」"
+            ]
+            await message.channel.send(random.choice(responses))
+        else:
+            await message.channel.send(f"「{message.author.mention}、おやすみ！お昼寝かな？ボクも一緒に寝ちゃおうかな…えへへ。」")
+        return
+
+    if "疲れた" in content or "つかれた" in content:
+        await message.channel.send(f"「{message.author.mention}、お疲れ様！あんまり無理しないでね。ボクが癒してあげるよ！」")
+        return
+
+    if "おなかすいた" in content or "お腹空いた" in content:
+        await message.channel.send(f"「{message.author.mention}、お腹すいちゃったの？何か美味しいものを食べに行こうよ！」")
         return
 
     if len(message.mentions) >= 5:
@@ -204,15 +255,15 @@ async def on_message(message):
         await message.channel.send(f"「わわっ！{message.author.mention}、そんなにたくさん呼んだらみんなびっくりしちゃうよ！大量メンションはやめてね」", delete_after=5)
         return
     
-    u_id, now = message.author.id, datetime.datetime.now(JST)
-    last_messages[u_id].append({"content": message.content, "time": now})
-    last_messages[u_id] = [m for m in last_messages[u_id] if (now - m["time"]).total_seconds() < 5]
+    u_id = message.author.id
+    last_messages[u_id].append({"content": message.content, "time": now_jst})
+    last_messages[u_id] = [m for m in last_messages[u_id] if (now_jst - m["time"]).total_seconds() < 5]
     if len(last_messages[u_id]) >= 3 and len(set(m["content"] for m in last_messages[u_id][-3:])) == 1:
         await message.delete()
         await message.channel.send(f"「{message.author.mention}、同じことを何度も送るのは控えてね。みんなと楽しくお話ししよう！」", delete_after=5)
         return
 
-    extract = re.search(r"https://(?:ptb\.|canary\.)?discord\.com/channels/(\d+)/(\d+)/(\d+)", message.content)
+    extract = re.search(r"https://(?:ptb\.|canary\.)?discord\.com/channels/(\d+)/(\d+)/(\d+)", content)
     if extract:
         g, c, m = map(int, extract.groups())
         if message.guild.id == g:
@@ -222,9 +273,8 @@ async def on_message(message):
                 emb.set_author(name=f_msg.author.display_name, icon_url=f_msg.author.display_avatar.url)
                 await message.reply(embed=emb, mention_author=False)
             except: pass
-    await bot.process_commands(message)
 
-# (以下、on_message_delete, on_message_edit, on_member_join, on_member_remove, スラッシュコマンド類は変更なしのため省略せずに保持)
+    await bot.process_commands(message)
 
 @bot.event
 async def on_message_delete(message):
@@ -268,7 +318,7 @@ async def on_member_remove(member):
 async def role_setup(it: discord.Interaction, text: str, role1: discord.Role, removable: bool = True):
     view = RolePanelView()
     view.add_item(RoleButton(role1, removable))
-    content = f"**{text}**\n「ボクが役職を配るよ！好きなボタンを押してね！」"
+    content = f"**{text}**"
     await it.channel.send(content, view=view)
     await it.response.send_message("「役職パネルを置いたよ！これでバッチリだね！」", ephemeral=True)
 
@@ -279,8 +329,7 @@ async def role_add(it: discord.Interaction, message_id: str, role: discord.Role,
     await it.response.defer(ephemeral=True)
     try:
         msg = await it.channel.fetch_message(int(message_id))
-        view = discord.ui.View.from_message(msg)
-        view.timeout = None
+        view = RolePanelView() 
         view.add_item(RoleButton(role, removable))
         await msg.edit(view=view)
         await it.followup.send(f"✅ 「『{role.name}』のボタンを足しておいたよ！」", ephemeral=True)
@@ -330,7 +379,7 @@ async def ban(it: discord.Interaction, member: discord.Member, reason: str = "�
     try:
         await member.ban(reason=reason)
         await it.response.send_message(f"「えいっ！{member.display_name}を追い出したよ。理由は『{reason}』だね。これでみんな安心だよ！」")
-    except: await it.response.send_message("「ごめんね、ボクの力じゃその人を追い出せなかったよ…」", ephemeral=True)
+    except: await it.response.send_message("「ごめんね、ボクの力が足りなくてその人を追い出せなかったよ…」", ephemeral=True)
 
 @bot.tree.command(name="timeout", description="少しの間、静かにしてもらうよ")
 @app_commands.checks.has_permissions(moderate_members=True)
