@@ -107,7 +107,7 @@ class TicketView(discord.ui.View):
                           discord.utils.get(category.text_channels, name=f"🎫｜提案-{user.display_name.lower()}")
         
         if existing_ticket:
-            return await it.followup.send(f"「わわっ！{user.mention}さん、もうチケットを開いているみたいだよ！まずはそっちでお話ししよう？：{existing_ticket.mention}」", ephemeral=True)
+            return await it.followup.send(f"「わわっ！{user.display_name}さん、もうチケットを開いているみたいだよ！まずはそっちでお話ししよう？：{existing_ticket.mention}」", ephemeral=True)
 
         try:
             overwrites = {
@@ -117,7 +117,7 @@ class TicketView(discord.ui.View):
             }
             channel = await guild.create_text_channel(name=f"🎫｜{ticket_type}-{user.display_name}", overwrites=overwrites, category=category)
             await it.followup.send(f"「チケットを作ったよ！こっちでボクたちが待ってるね！：{channel.mention}」", ephemeral=True)
-            await channel.send(f"**【{ticket_type}窓口】**\n「{user.mention}さん、こんにちは！ボクに内容を教えてね。全力で助けるよ！」", view=CloseTicketView())
+            await channel.send(f"**【{ticket_type}窓口】**\n「{user.display_name}さん、こんにちは！ボクに内容を教えてね。全力で助けるよ！」", view=CloseTicketView())
         except Exception as e:
             await it.followup.send(f"「作成に失敗しちゃった…。権限を確認してくれるかな？：`{e}`」", ephemeral=True)
 
@@ -165,7 +165,7 @@ bot = MyBot()
 async def on_ready():
     sys_log = bot.get_channel(SYSTEM_LOG_ID)
     if sys_log:
-        try: await sys_log.send("✅ **「準備完了！設定を更新したよ。ボク、いつでもいけるよ！」**")
+        try: await sys_log.send("✅ **「準備完了！これからはニックネームで呼ぶね！ボク、いつでもいけるよ！」**")
         except: pass
 
 @bot.event
@@ -175,7 +175,7 @@ async def on_voice_state_update(member, before, after):
             new_ch = await member.guild.create_voice_channel(name=f"🔨｜設定中...", category=after.channel.category)
             await member.move_to(new_ch)
             temp_channels.append(new_ch.id)
-            await new_ch.send(f"「{member.mention}、入室ありがとう！この部屋をどんな目的にするかボクに教えて！」", view=VCTypeView(new_ch))
+            await new_ch.send(f"「{member.display_name}、入室ありがとう！この部屋をどんな目的にするかボクに教えて！」", view=VCTypeView(new_ch))
         except: pass
     if before.channel and before.channel.id in temp_channels and len(before.channel.members) == 0:
         try:
@@ -189,70 +189,71 @@ async def on_message(message):
     now_jst = datetime.datetime.now(JST)
     now_hour = now_jst.hour
     content = message.content
+    u_name = message.author.display_name # ニックネームを取得
 
     if "おはよう" in content:
         if 5 <= now_hour < 11:
             responses = [
-                f"「{message.author.mention}、おはよう！今日もいい一日になりそうだね！」",
-                f"「ふわぁ…おはよう、{message.author.mention}！朝ごはんは何食べる？」",
-                f"「おはよう！{message.author.mention}が来てくれて、ボク嬉しいな！」"
+                f"「{u_name}、おはよう！今日もいい一日になりそうだね！」",
+                f"「ふわぁ…おはよう、{u_name}！朝ごはんは何食べる？」",
+                f"「おはよう！{u_name}が来てくれて、ボク嬉しいな！」"
             ]
             await message.channel.send(random.choice(responses))
         elif 11 <= now_hour < 18:
-            await message.channel.send(f"「{message.author.mention}、おはよう…かな？今はもう『こんにちは』の時間だよ！えへへ、寝坊しちゃった？」")
+            await message.channel.send(f"「{u_name}、おはよう…かな？今はもう『こんにちは』の時間だよ！えへへ、寝坊しちゃった？」")
         else:
-            await message.channel.send(f"「わわっ、{message.author.mention}！今は夜だよ？『こんばんは』の時間じゃないかな？」")
+            await message.channel.send(f"「わわっ、{u_name}！今は夜だよ？『こんばんは』の時間じゃないかな？」")
         return
     
     if "こんにちは" in content:
         if 11 <= now_hour < 18:
             responses = [
-                f"「{message.author.mention}、こんにちは！お外はどんな感じ？」",
-                f"「こんにちは！{message.author.mention}、今日も元気そうだね！」",
-                f"「やぁ！{message.author.mention}、こんにちは！一緒に遊ぼうよ！」"
+                f"「{u_name}、こんにちは！お外はどんな感じ？」",
+                f"「こんにちは！{u_name}、今日も元気そうだね！」",
+                f"「やぁ！{u_name}、こんにちは！一緒に遊ぼうよ！」"
             ]
             await message.channel.send(random.choice(responses))
         elif 5 <= now_hour < 11:
-            await message.channel.send(f"「{message.author.mention}、こんにちは！…にはちょっと早いかな？今は『おはよう』の時間だよ！」")
+            await message.channel.send(f"「{u_name}、こんにちは！…にはちょっと早いかな？今は『おはよう』の時間だよ！」")
         else:
-            await message.channel.send(f"「{message.author.mention}、こんにちは！…って, 今はもう暗いよ？『こんばんは』の時間だね！」")
+            await message.channel.send(f"「{u_name}、こんにちは！…って、今はもう暗いよ？『こんばんは』の時間だね！」")
         return
 
     if "こんばんは" in content:
         if 18 <= now_hour or now_hour < 5:
             responses = [
-                f"「{message.author.mention}、こんばんは！星がとっても綺麗だよ！」",
-                f"「こんばんは、{message.author.mention}！今日はどんな一日だった？」",
+                f"「{u_name}、こんばんは！星がとっても綺麗だよ！」",
+                f"「こんばんは、{u_name}！今日はどんな一日だった？」",
                 f"「こんばんは！夜は冷えるから、暖かくして過ごしてね！」"
             ]
             await message.channel.send(random.choice(responses))
         else:
-            await message.channel.send(f"「{message.author.mention}、こんばんは！…にはまだちょっと早いかも？今はまだ明るいよ！」")
+            await message.channel.send(f"「{u_name}、こんばんは！…にはまだちょっと早いかも？今はまだ明るいよ！」")
         return
 
     if "おやすみ" in content:
         if 20 <= now_hour or now_hour < 5:
             responses = [
-                f"「{message.author.mention}、おやすみ！ゆっくり休んで、また明日も遊ぼうね！」",
-                f"「おやすみなさい、{message.author.mention}。いい夢が見られますように…！」",
-                f"「ボクも眠くなってきちゃった…おやすみ、{message.author.mention}！」"
+                f"「{u_name}、おやすみ！ゆっくり休んで、また明日も遊ぼうね！」",
+                f"「おやすみなさい、{u_name}。いい夢が見られますように…！」",
+                f"「ボクも眠くなってきちゃった…おやすみ、{u_name}！」"
             ]
             await message.channel.send(random.choice(responses))
         else:
-            await message.channel.send(f"「{message.author.mention}、おやすみ！お昼寝かな？ボクも一緒に寝ちゃおうかな…えへへ。」")
+            await message.channel.send(f"「{u_name}、おやすみ！お昼寝かな？ボクも一緒に寝ちゃおうかな…えへへ。」")
         return
 
     if "疲れた" in content or "つかれた" in content:
-        await message.channel.send(f"「{message.author.mention}、お疲れ様！あんまり無理しないでね。ボクが癒してあげるよ！」")
+        await message.channel.send(f"「{u_name}、お疲れ様！あんまり無理しないでね。ボクが癒してあげるよ！」")
         return
 
     if "おなかすいた" in content or "お腹空いた" in content:
-        await message.channel.send(f"「{message.author.mention}、お腹すいちゃったの？何か美味しいものを食べに行こうよ！」")
+        await message.channel.send(f"「{u_name}、お腹すいちゃったの？何か美味しいものを食べに行こうよ！」")
         return
 
     if len(message.mentions) >= 5:
         await message.delete()
-        await message.channel.send(f"「わわっ！{message.author.mention}、そんなにたくさん呼んだらみんなびっくりしちゃうよ！大量メンションはやめてね」", delete_after=5)
+        await message.channel.send(f"「わわっ！{u_name}、そんなにたくさん呼んだらみんなびっくりしちゃうよ！大量メンションはやめてね」", delete_after=5)
         return
     
     u_id = message.author.id
@@ -260,7 +261,7 @@ async def on_message(message):
     last_messages[u_id] = [m for m in last_messages[u_id] if (now_jst - m["time"]).total_seconds() < 5]
     if len(last_messages[u_id]) >= 3 and len(set(m["content"] for m in last_messages[u_id][-3:])) == 1:
         await message.delete()
-        await message.channel.send(f"「{message.author.mention}、同じことを何度も送るのは控えてね。みんなと楽しくお話ししよう！」", delete_after=5)
+        await message.channel.send(f"「{u_name}、同じことを何度も送るのは控えてね。みんなと楽しくお話ししよう！」", delete_after=5)
         return
 
     extract = re.search(r"https://(?:ptb\.|canary\.)?discord\.com/channels/(\d+)/(\d+)/(\d+)", content)
@@ -282,7 +283,7 @@ async def on_message_delete(message):
     log = bot.get_channel(LOG_CHANNEL_ID)
     if log:
         emb = discord.Embed(title="🗑 メッセージが消されたみたい…", color=discord.Color.red(), timestamp=message.created_at)
-        emb.add_field(name="書いた人", value=message.author.mention)
+        emb.add_field(name="書いた人", value=message.author.display_name)
         emb.add_field(name="内容", value=message.content or "画像など", inline=False)
         try: await log.send(embed=emb)
         except: pass
@@ -302,7 +303,7 @@ async def on_message_edit(before, after):
 async def on_member_join(member):
     ch = bot.get_channel(WELCOME_CHANNEL_ID)
     if ch:
-        try: await ch.send(f"「ボクはエフィリン！よろしくね、{member.mention}！このサーバーへようこそ！」")
+        try: await ch.send(f"「ボクはエフィリン！よろしくね、{member.display_name}！このサーバーへようこそ！」")
         except: pass
 
 @bot.event
